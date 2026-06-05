@@ -441,10 +441,10 @@
 </div>
 
 <div class="toast" id="toast"></div>
-
 <script>
     let todos = [];
     let currentFilter = 'all';
+    let useLocalStorage = false;
 
     async function api(path, method = 'GET', body = null) {
         const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -522,10 +522,13 @@
     async function loadTodos() {
         try {
             todos = await api('/api/todos');
+            useLocalStorage = false;
             render();
         } catch (e) {
-            showToast('❌ Yuklashda xatolik');
-            document.getElementById('todo-list').innerHTML = '';
+            console.warn("API is not available, falling back to localStorage:", e);
+            useLocalStorage = true;
+            todos = JSON.parse(localStorage.getItem('todos') || '[]');
+            render();
         }
     }
 
@@ -542,15 +545,33 @@
         btn.disabled = true;
         btn.textContent = '...';
         try {
-            const newTodo = await api('/api/todos', 'POST', { title });
-            todos.push(newTodo);
-            input.value = '';
-            currentFilter = 'all';
-            document.querySelectorAll('.filter-btn').forEach((b, i) => {
-                b.classList.toggle('active', i === 0);
-            });
-            render();
-            showToast('✦ Vazifa qo\'shildi');
+            if (useLocalStorage) {
+                const newId = Math.max(...todos.map(t => t.id), 0) + 1;
+                const newTodo = {
+                    id: newId,
+                    title: title,
+                    completed: false
+                };
+                todos.push(newTodo);
+                localStorage.setItem('todos', JSON.stringify(todos));
+                input.value = '';
+                currentFilter = 'all';
+                document.querySelectorAll('.filter-btn').forEach((b, i) => {
+                    b.classList.toggle('active', i === 0);
+                });
+                render();
+                showToast('✦ Vazifa qo\'shildi');
+            } else {
+                const newTodo = await api('/api/todos', 'POST', { title });
+                todos.push(newTodo);
+                input.value = '';
+                currentFilter = 'all';
+                document.querySelectorAll('.filter-btn').forEach((b, i) => {
+                    b.classList.toggle('active', i === 0);
+                });
+                render();
+                showToast('✦ Vazifa qo\'shildi');
+            }
         } catch (e) {
             showToast('❌ ' + e.message);
         } finally {
@@ -563,10 +584,17 @@
         const todo = todos.find(t => t.id === id);
         if (!todo) return;
         try {
-            const updated = await api(`/api/todos/${id}`, 'PATCH', { completed: !todo.completed });
-            todo.completed = updated.completed;
-            render();
-            if (todo.completed) showToast('✅ Bajarildi!');
+            if (useLocalStorage) {
+                todo.completed = !todo.completed;
+                localStorage.setItem('todos', JSON.stringify(todos));
+                render();
+                if (todo.completed) showToast('✅ Bajarildi!');
+            } else {
+                const updated = await api(`/api/todos/${id}`, 'PATCH', { completed: !todo.completed });
+                todo.completed = updated.completed;
+                render();
+                if (todo.completed) showToast('✅ Bajarildi!');
+            }
         } catch (e) {
             showToast('❌ ' + e.message);
         }
@@ -577,10 +605,17 @@
         if (el) el.classList.add('removing');
         setTimeout(async () => {
             try {
-                await api(`/api/todos/${id}`, 'DELETE');
-                todos = todos.filter(t => t.id !== id);
-                render();
-                showToast("🗑️ O'chirildi");
+                if (useLocalStorage) {
+                    todos = todos.filter(t => t.id !== id);
+                    localStorage.setItem('todos', JSON.stringify(todos));
+                    render();
+                    showToast("🗑️ O'chirildi");
+                } else {
+                    await api(`/api/todos/${id}`, 'DELETE');
+                    todos = todos.filter(t => t.id !== id);
+                    render();
+                    showToast("🗑️ O'chirildi");
+                }
             } catch (e) {
                 showToast('❌ ' + e.message);
                 render();
