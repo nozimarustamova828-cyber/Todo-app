@@ -444,7 +444,7 @@
 <script>
     let todos = [];
     let currentFilter = 'all';
-    let useLocalStorage = false;
+    let useLocalStorage = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 
     async function api(path, method = 'GET', body = null) {
         const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -520,15 +520,31 @@
     }
 
     async function loadTodos() {
-        try {
-            todos = await api('/api/todos');
-            useLocalStorage = false;
-            render();
-        } catch (e) {
-            console.warn("API is not available, falling back to localStorage:", e);
-            useLocalStorage = true;
-            todos = JSON.parse(localStorage.getItem('todos') || '[]');
-            render();
+        if (useLocalStorage) {
+            let stored = localStorage.getItem('todos');
+            if (stored !== null) {
+                todos = JSON.parse(stored);
+                render();
+            } else {
+                try {
+                    const defaults = await api('/api/todos');
+                    todos = defaults;
+                    localStorage.setItem('todos', JSON.stringify(todos));
+                } catch (e) {
+                    todos = [];
+                }
+                render();
+            }
+        } else {
+            try {
+                todos = await api('/api/todos');
+                render();
+            } catch (e) {
+                console.warn("API is not available, falling back to localStorage:", e);
+                useLocalStorage = true;
+                todos = JSON.parse(localStorage.getItem('todos') || '[]');
+                render();
+            }
         }
     }
 
